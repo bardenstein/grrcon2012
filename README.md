@@ -4,10 +4,14 @@
 2. What time was the attack delivered?
 3. What was that name of the file that dropped the backdoor?
 4. What is the ip address of the C2 server?
+221.54.197.32:443
 5. What type of backdoor is installed?
+Poison Ivy RAT
 6. What is the mutex the backdoor is using?
+)!VoqA.I4
 7. Whee backdoor placed on the filesystem?
 8. What process name and process id is the backdoor running in?
+explorer.exe (1096)
 9. What additional tools do you believe were placed on the machine?
 10. What directory was created to place the newly dropped tools?
 11. How did the attacker escalate privileges?
@@ -21,6 +25,11 @@
 19. What is the secret code inside the exfiltrated documents?
 20. What is the password for the backdoor?
 
+
+# Approach
+
+Noob
+Didn't see the questions (they guide what to look for). Get whole view.
 
 # Solution
 
@@ -45,36 +54,115 @@ Something about SANS courses
 
 We find two instances of userinit that start 30 min after boot, one of which (PID 1212) a number of processes including Adobe Reader and a command prompt which runs mdd. A quick check of the process' SID with `getsids` reveals that this process was run by the Admin user. 
 
-Let's check the explorer process spawned by the suspicious userinit, since explorer is a commonly attacked process. Running `handles` and filtering for mutexes (-t Mutant) reveals a suspicious Mutant entry:
+Let's check the explorer process spawned by the suspicious userinit, since explorer is a commonly attacked process. `dlllist` didn't turn up anything obvious, so I tried running `handles` and filtering for mutexes (-t Mutant) reveals a suspicious Mutant entry:
 
 `)!VoqA.I4`
 
 which some may recognize as a mutex for the Poison Ivy backdoor. 
 
-TODO: quick research on Poison Ivy. 
+
+### So what did the explorer process do? 
+Looking for network artifacts, we run `connscan | grep 1096` to search for related network artifacts. 
+
+`172.16.150.20:1424      221.54.197.32:443     1096`
+
+So explorer.exe initiated a network connection to a remote host (221.54.197.32) over port 443. 
+
+Dumped the file with vaddump. 
+Searched for bits that contained 221.54.197.32, searched with grep -C 10. Found 'tigers' and 'svchosts.exe.'
+
+Explorer.exe also initiated a command prompt that ran `mdd.exe` and two Adobe-related processes. Analyzing those processes for malicious DLLs and handles, we see a few more results:
+
+TODO: what is adobe processes.
+AdobeARM is an auto-update utility  'that notifies you, downloads, and installs new updates for these products.' https://www.bleepingcomputer.com/startups/AdobeARM.exe-25493.html
+
+Means makes network connections? 
+Reader_SL is a preloader
+https://www.neuber.com/taskmanager/process/reader_sl.exe.html
+
+AdobeARM (1796) made several connections to 199.7.59.190:80. So this could be a legtimiate auto-update, or a malicious process masquerading as an auto-update, or a hijacked process. 
+File mutant: NamedPipe\Router? - look at registry keys for certificates
+
+MDD.exe (1396)
+- `dlllist`: Reveals command line of `mdd.exe -o memdump.img`
+
+cmd.exe (?)
+- `consoles`: 
+net use z: \\DC01\response
+connects to domain controller. 
+copies mdd.exe to current system
+- `cmdscan`:
+Cmd:Otp 66.32.119.38
+Mdd: Out 1.txt, Out 2.txt
+
+If attacker utilizes simply-named .txt files, let's do a quick scan for with filescan:
+
+`Windows\system32\h323log.txt`
+`Windows\system32\systems\f.txt`
+
+
+In summary:
+- Attacker used `net use` to remotely access the Domain Controller
+- Attacker copied `mdd.exe` to the current system
+- Attacker executed `mdd.exe` to dump memory
+- Attacker exfil-ed the image to 66.32.119.39
+- At some point, attacker create `Out 1.txt` and `Out 2.txt`
 
 
 
 
 Indicators:
-- Userinit (1212). 
+- Userinit (1212)
+- Explorer (1096)
+- 221.54.197.32 (explorer)
+- 199.7.59.190:80 (1796)
 
 Questions?
-- How did userinit get hooked?
-- what's it doing?
+- How did explorer get hooked?
+- How did the backdoor get dropped?
+- What is it doing?
+
+TODO
+- net use: rdp/ps. 
+- 
 
 
 
 
+Timeline:
+2012-04-28 02:20:54   explorer.exe (1096)
 
-To start, I decided to check out network connections to identify any suspicious activity (C2, download, exfil, etc.).
 
-`$ vol.py –f memdump.img connscan`   
+## Timeline Analysis
 
-We see a few interesting connections:
-- 221.54.197.32:443 from PID 1096. 
-- 199.7.52.190:80 from PID 1796.
-- Activity on ports 139 & 445 to 172.16.150.10
+Searched timeline for svchosts:
+less compromised.timeline | grep svchosts
+- Created 
+- Executed once (prefetch)
+
+Pivot off time of svchosts.exe creation. 
+
+Find. SWING-MECHANICS.DOC[1].EXE executed (prefetch). WTF
+Search for swing-mechanics, only found the prefetch file ??
+Right before, looks like running internet explorer. 
+
+Run strings on memory image:
+- TODO: find it. 
+
+After swing mechanics, see IPCONFIG, NET and PING activity. Likely something has been downloaded and is communicating back to C2 (compare to timeline).
+
+Also see creation of C:\Windows\system32\systems. Interesting... 
+Then see f.txt, g.exe, p.exe, r.exe, sysmon.exe, w.exe.
+
+What are they? Are they run?
+
+FTP?
+- executed
+what was exfil-ed?
+
+
+TODO: quick research on Poison Ivy. 
+
 
 
 
