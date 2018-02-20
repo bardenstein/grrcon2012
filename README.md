@@ -35,6 +35,37 @@ From the results, we learn a few (potentially) important things:
 - Image date/time: 2012-04-28 02:23:21 UTC
 - Image local date/time: 2012-04-27 22:23:21 -0400 (good for just-in-case timestamp referencing)
 
+## Approach
+
+Something about SANS courses
+
+## Identify Rogue Processes
+
+`pslist` + `pstree`
+
+We find two instances of userinit that start 30 min after boot, one of which (PID 1212) a number of processes including Adobe Reader and a command prompt which runs mdd. A quick check of the process' SID with `getsids` reveals that this process was run by the Admin user. 
+
+Let's check the explorer process spawned by the suspicious userinit, since explorer is a commonly attacked process. Running `handles` and filtering for mutexes (-t Mutant) reveals a suspicious Mutant entry:
+
+`)!VoqA.I4`
+
+which some may recognize as a mutex for the Poison Ivy backdoor. 
+
+TODO: quick research on Poison Ivy. 
+
+
+
+
+Indicators:
+- Userinit (1212). 
+
+Questions?
+- How did userinit get hooked?
+- what's it doing?
+
+
+
+
 
 To start, I decided to check out network connections to identify any suspicious activity (C2, download, exfil, etc.).
 
